@@ -1,17 +1,21 @@
 #include "esphome/components/climate/climate.h"
 #include "esphome/components/climate/climate_mode.h"
 #include "esppac.h"
+
 namespace esphome {
 namespace panasonic_ac {
 namespace CNT {
-static const uint8_t CTRL_HEADER = 0xF0;  // The header for control frames
-static const uint8_t POLL_HEADER = 0x70;  // The header for the poll command
-static const int POLL_INTERVAL = 5000;  // The interval at which to poll the AC
-static const int CMD_INTERVAL = 250;    // The interval at which to send commands
+
+static const uint8_t CTRL_HEADER = 0xF0;
+static const uint8_t POLL_HEADER = 0x70;
+static const int POLL_INTERVAL = 5000;
+static const int CMD_INTERVAL = 250;
+
 enum class ACState {
-  Initializing,  // Before first query response is receive
-  Ready,         // All done, ready to receive regular packets
+  Initializing,
+  Ready,
 };
+
 class PanasonicACCNT : public PanasonicAC {
  public:
   void control(const climate::ClimateCall &call) override;
@@ -25,9 +29,10 @@ class PanasonicACCNT : public PanasonicAC {
   void setup() override;
   void loop() override;
  protected:
-  ACState state_ = ACState::Initializing;  // Stores the internal state of the AC, used during initialization
-  std::vector<uint8_t> data = std::vector<uint8_t>(10);  // Stores the data received from the AC
-  std::vector<uint8_t> cmd;                              // Used to build next command
+  ACState state_ = ACState::Initializing;
+  // Expanded to 33 to accommodate the full RX payload from your logs
+  std::vector<uint8_t> data = std::vector<uint8_t>(33); 
+  std::vector<uint8_t> cmd;
   void handle_poll();
   void handle_cmd();
   void set_data(bool set);
@@ -36,6 +41,7 @@ class PanasonicACCNT : public PanasonicAC {
   bool verify_packet();
   void handle_packet();
 };
+
 }  // namespace CNT
 }  // namespace panasonic_ac
 }  // namespace esphome
