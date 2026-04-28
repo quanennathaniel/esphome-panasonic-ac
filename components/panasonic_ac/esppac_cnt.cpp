@@ -132,6 +132,10 @@ static bool determine_preset_nanoex(uint8_t preset) {
   }
 }
 
+static bool determine_nanoeg(uint8_t value) {
+  return value == 0x61;
+}
+
 static bool determine_eco(uint8_t value) {
   if (value == 0x40)
     return true;
@@ -321,6 +325,7 @@ void PanasonicACCNT::set_data(bool set) {
 
   const char *preset = determine_preset(this->data[5]);
   bool nanoex = determine_preset_nanoex(this->data[5]);
+  bool nanoeg = determine_nanoeg(this->data[7]);
   bool eco = determine_eco(this->data[8]);
   bool econavi = determine_econavi(this->data[5]);
   bool mildDry = determine_mild_dry(this->data[2]);
@@ -370,6 +375,7 @@ void PanasonicACCNT::set_data(bool set) {
   this->set_custom_preset_(preset);
 
   this->update_nanoex(nanoex);
+  this->update_nanoeg(nanoeg);
   this->update_eco(eco);
   this->update_econavi(econavi);
   this->update_mild_dry(mildDry);
@@ -564,6 +570,26 @@ void PanasonicACCNT::on_nanoex_change(bool state) {
   } else {
     ESP_LOGV(TAG, "Turning nanoex off");
     this->cmd[5] = (this->cmd[5] & 0x0F);
+  }
+}
+
+void PanasonicACCNT::on_nanoeg_change(bool state) {
+  if (this->state_ != ACState::Ready)
+    return;
+
+  if (this->cmd.empty()) {
+    ESP_LOGV(TAG, "Copying data to cmd");
+    this->cmd = this->data;
+  }
+
+  this->nanoeg_state_ = state;
+
+  if (state) {
+    ESP_LOGV(TAG, "Turning nanoe-G on");
+    this->cmd[7] = 0x61;
+  } else {
+    ESP_LOGV(TAG, "Turning nanoe-G off");
+    this->cmd[7] = 0x27;
   }
 }
 
