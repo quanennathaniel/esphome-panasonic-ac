@@ -63,41 +63,37 @@ static const char *determine_horizontal_swing(uint8_t swing) {
 
 static const char *determine_preset(uint8_t preset) {
   uint8_t nib = (preset >> 0) & 0x0F;
-  switch (nib) {
-    case 0x02: return "Powerful";
-    case 0x04: return "Quiet";
-    default: return "Normal";
-  }
+  return (nib == 0x02) ? "Powerful" : (nib == 0x04) ? "Quiet" : "Normal";
 }
 
 static bool determine_preset_nanoex(uint8_t preset) {
-  return ((preset >> 4) & 0x04) == 0x04;
+  return (preset >> 4) & 0x04;
 }
 
-// Logic updated based on your logs: Byte 28 changes when Nanoe-G is toggled.
+// Logic based on your logs: Byte 28 changes from 0x61 to 0x9F (bit 7 and others)
 static bool determine_nanoeg(uint8_t value) {
-  return (value == 0x9F || value == 0x88); 
+  return (value & 0x80) == 0x80; 
 }
 
 static bool determine_eco(uint8_t value) {
-  return (value == 0x40);
+  return value == 0x40;
 }
 
 static bool determine_econavi(uint8_t value) {
-  return (value & 0x10) == 0x10;
+  return value & 0x10;
 }
 
 static bool determine_mild_dry(uint8_t value) {
-  return (value == 0x7F);
+  return value == 0x7F;
 }
 
-uint16_t determine_power_consumption(uint8_t byte_28, uint8_t byte_29, uint8_t byte_30) {
+uint16_t determine_power_consumption(uint8_t byte_28, uint8_t byte_29) {
   return (uint16_t) (byte_28 + (byte_29 * 256));
 }
 
 void PanasonicACCNT::setup() {
   PanasonicAC::setup();
-  ESP_LOGD(TAG, "Using CZ-TACG1 35-byte protocol for Nanoe-G support");
+  ESP_LOGD(TAG, "Using modified 35-byte protocol for Nanoe-G");
 }
 
 void PanasonicACCNT::loop() {
@@ -124,7 +120,7 @@ void PanasonicACCNT::control(const climate::ClimateCall &call) {
       case climate::CLIMATE_MODE_DRY: this->cmd[0] = 0x24; break;
       case climate::CLIMATE_MODE_HEAT_COOL: this->cmd[0] = 0x04; break;
       case climate::CLIMATE_MODE_FAN_ONLY: this->cmd[0] = 0x64; break;
-      case climate::CLIMATE_MODE_OFF: this->cmd[0] = this->cmd[0] & 0xF0; break;
+      case climate::CLIMATE_MODE_OFF: this->cmd[0] &= 0xF0; break;
       default: break;
     }
   }
@@ -154,7 +150,7 @@ void PanasonicACCNT::set_data(bool set) {
   const char *preset = determine_preset(this->data[5]);
   bool nanoex = determine_preset_nanoex(this->data[5]);
   
-  // Updated indices to match the 35-byte RX packet structure
+  // Pointing to the correct byte in the expanded data vector
   bool nanoeg = determine_nanoeg(this->data[28]); 
   bool eco = determine_eco(this->data[8]);
   bool econavi = determine_econavi(this->data[5]);
@@ -167,8 +163,8 @@ void PanasonicACCNT::set_data(bool set) {
     if (this->rx_buffer_[19] != 0x80) this->update_outside_temperature((int8_t) this->rx_buffer_[19]);
     
     if (this->current_power_consumption_sensor_ != nullptr) {
-       uint16_t power = determine_power_consumption(this->rx_buffer_[28], this->rx_buffer_[29], this->rx_buffer_[30]);
-       this->update_current_power_consumption(power);
+      uint16_t power = determine_power_consumption(this->rx_buffer_[28], this->rx_buffer_[29]);
+      this->update_current_power_consumption(power);
     }
   }
 
@@ -184,7 +180,7 @@ void PanasonicACCNT::set_data(bool set) {
 
 void PanasonicACCNT::handle_packet() {
   if (this->rx_buffer_[0] == POLL_HEADER) {
-    // CAPTURE ALL 33 BYTES of payload (35 total - Header/Length/Checksum)
+    // CAPTURE ALL 33 BYTES of data payload
     this->data = std::vector<uint8_t>(this->rx_buffer_.begin() + 2, this->rx_buffer_.end() - 1);
     this->set_data(true);
     this->publish_state();
@@ -198,17 +194,60 @@ void PanasonicACCNT::on_nanoeg_change(bool state) {
 
   this->nanoeg_state_ = state;
   if (state) {
-    ESP_LOGV(TAG, "Turning nanoe-G on");
-    this->cmd[28] = 0x9F; // Value observed in your log for active nanoe-G
+    ESP_LOGV(TAG, "Turning nanoe-G ON via Byte 28 Bitmask");
+    this->cmd[28] |= 0x80; // Set high bit
+    // Force the rest of the byte to match log activity if mask isn't enough
+    this->cmd[28] |= 0x1F; 
   } else {
-    ESP_LOGV(TAG, "Turning nanoe-G off");
-    this->cmd[28] = 0x61; // Value observed in your log for inactive nanoe-G
+    ESP_LOGV(TAG, "Turning nanoe-G OFF via Byte 28 Bitmask");
+    this->cmd[28] &= ~0x80; // Clear high bit
+    this->cmd[28] &= 0x61;
   }
 }
 
-// ... Rest of the swing and eco functions remain same as your original ...
-// Ensure indices in on_horizontal_swing_change/on_vertical_swing_change 
-// match the indices found in your data vector.
+void PanasonicACCNT::on_vertical_swing_change(const StringRef &swing) {
+  if (this->state_ != ACState::Ready) return;
+  if (this->cmd.empty()) this->cmd = this->data;
+  if (swing == "down") this->cmd[4] = (this->cmd[4] & 0x0F) + 0x50;
+  else if (swing == "auto") this->cmd[4] = (this->cmd[4] & 0x0F) + 0xF0;
+}
+
+void PanasonicACCNT::on_horizontal_swing_change(const StringRef &swing) {
+  if (this->state_ != ACState::Ready) return;
+  if (this->cmd.empty()) this->cmd = this->data;
+  if (swing == "left") this->cmd[4] = (this->cmd[4] & 0xF0) + 0x09;
+  else if (swing == "auto") this->cmd[4] = (this->cmd[4] & 0xF0) + 0x0D;
+}
+
+void PanasonicACCNT::on_nanoex_change(bool state) {
+  if (this->state_ != ACState::Ready) return;
+  if (this->cmd.empty()) this->cmd = this->data;
+  this->nanoex_state_ = state;
+  if (state) this->cmd[5] |= 0x40;
+  else this->cmd[5] &= ~0x40;
+}
+
+void PanasonicACCNT::on_eco_change(bool state) {
+  if (this->state_ != ACState::Ready) return;
+  if (this->cmd.empty()) this->cmd = this->data;
+  this->eco_state_ = state;
+  this->cmd[8] = state ? 0x40 : 0x00;
+}
+
+void PanasonicACCNT::on_econavi_change(bool state) {
+  if (this->state_ != ACState::Ready) return;
+  if (this->cmd.empty()) this->cmd = this->data;
+  this->econavi_state_ = state;
+  if (state) this->cmd[5] |= 0x10;
+  else this->cmd[5] &= ~0x10;
+}
+
+void PanasonicACCNT::on_mild_dry_change(bool state) {
+  if (this->state_ != ACState::Ready) return;
+  if (this->cmd.empty()) this->cmd = this->data;
+  this->mild_dry_state_ = state;
+  this->cmd[2] = state ? 0x7F : 0x80;
+}
 
 void PanasonicACCNT::send_command(std::vector<uint8_t> command, CommandType type, uint8_t header) {
   uint8_t length = command.size();
@@ -246,54 +285,7 @@ bool PanasonicACCNT::verify_packet() {
   if (this->rx_buffer_[1] != this->rx_buffer_.size() - 3) return false;
   uint8_t checksum = 0;
   for (uint8_t b : this->rx_buffer_) checksum += b;
-  return (checksum == 0);
-}
-
-// Helper methods for your existing logic
-void PanasonicACCNT::on_vertical_swing_change(const StringRef &swing) {
-  if (this->state_ != ACState::Ready) return;
-  if (this->cmd.empty()) this->cmd = this->data;
-  if (swing == "down") this->cmd[4] = (this->cmd[4] & 0x0F) + 0x50;
-  else if (swing == "auto") this->cmd[4] = (this->cmd[4] & 0x0F) + 0xF0;
-}
-
-void PanasonicACCNT::on_horizontal_swing_change(const StringRef &swing) {
-  if (this->state_ != ACState::Ready) return;
-  if (this->cmd.empty()) this->cmd = this->data;
-  if (swing == "left") this->cmd[4] = (this->cmd[4] & 0xF0) + 0x09;
-  else if (swing == "auto") this->cmd[4] = (this->cmd[4] & 0xF0) + 0x0D;
-}
-
-void PanasonicACCNT::on_nanoex_change(bool state) {
-  if (this->state_ != ACState::Ready) return;
-  if (this->cmd.empty()) this->cmd = this->data;
-  this->nanoex_state_ = state;
-  if (state) this->cmd[5] = (this->cmd[5] & 0x0F) + 0x40;
-  else this->cmd[5] = (this->cmd[5] & 0x0F);
-}
-
-void PanasonicACCNT::on_eco_change(bool state) {
-  if (this->state_ != ACState::Ready) return;
-  if (this->cmd.empty()) this->cmd = this->data;
-  this->eco_state_ = state;
-  if (state) this->cmd[8] = 0x40;
-  else this->cmd[8] = 0x00;
-}
-
-void PanasonicACCNT::on_econavi_change(bool state) {
-  if (this->state_ != ACState::Ready) return;
-  if (this->cmd.empty()) this->cmd = this->data;
-  this->econavi_state_ = state;
-  if (state) this->cmd[5] = 0x10;
-  else this->cmd[5] = 0x00;
-}
-
-void PanasonicACCNT::on_mild_dry_change(bool state) {
-  if (this->state_ != ACState::Ready) return;
-  if (this->cmd.empty()) this->cmd = this->data;
-  this->mild_dry_state_ = state;
-  if (state) this->cmd[2] = 0x7F;
-  else this->cmd[2] = 0x80;
+  return checksum == 0;
 }
 
 } // namespace CNT
