@@ -6,14 +6,14 @@ namespace esphome {
 namespace panasonic_ac {
 namespace CNT {
 
-static const uint8_t CTRL_HEADER = 0xF0;
-static const uint8_t POLL_HEADER = 0x70;
-static const int POLL_INTERVAL = 5000;
-static const int CMD_INTERVAL = 250;
+static const uint8_t CTRL_HEADER = 0xF0;  // The header for control frames
+static const uint8_t POLL_HEADER = 0x70;  // The header for the poll command
+static const int POLL_INTERVAL = 5000;    // The interval at which to poll the AC
+static const int CMD_INTERVAL = 250;      // The interval at which to send commands
 
 enum class ACState {
-  Initializing,
-  Ready,
+  Initializing,  // Before first query response is received
+  Ready,         // All done, ready to receive regular packets
 };
 
 class PanasonicACCNT : public PanasonicAC {
@@ -29,10 +29,9 @@ class PanasonicACCNT : public PanasonicAC {
   void setup() override;
   void loop() override;
  protected:
-  ACState state_ = ACState::Initializing;
-  // Expanded to 33 to accommodate the full RX payload from your logs
-  std::vector<uint8_t> data = std::vector<uint8_t>(33); 
-  std::vector<uint8_t> cmd;
+  ACState state_ = ACState::Initializing;  // Stores the internal state of the AC, used during initialization
+  std::vector<uint8_t> data = std::vector<uint8_t>(33);  // Expanded to hold full 33-byte RX payload
+  std::vector<uint8_t> cmd;                              // Used to build next command
   void handle_poll();
   void handle_cmd();
   void set_data(bool set);
