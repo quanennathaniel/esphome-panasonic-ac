@@ -33,7 +33,6 @@ climate::ClimateTraits PanasonicAC::traits() {
 }
 
 void PanasonicAC::setup() {
-  // Initialize times
   this->init_time_ = millis();
   this->last_packet_sent_ = millis();
 
@@ -41,22 +40,17 @@ void PanasonicAC::setup() {
 }
 
 void PanasonicAC::loop() {
-  read_data();  // Read data from UART (if there is any)
+  read_data();
 }
 
 void PanasonicAC::read_data() {
-  while (available())  // Read while data is available
+  while (available())
   {
-    // if (this->receive_buffer_index >= BUFFER_SIZE) {
-    //   ESP_LOGE(TAG, "Receive buffer overflow");
-    //   receiveBufferIndex = 0;
-    // }
-
     uint8_t c;
-    this->read_byte(&c);  // Store in receive buffer
+    this->read_byte(&c);
     this->rx_buffer_.push_back(c);
 
-    this->last_read_ = millis();  // Update lastRead timestamp
+    this->last_read_ = millis();
   }
 }
 
@@ -70,8 +64,7 @@ void PanasonicAC::update_outside_temperature(int8_t temperature) {
   }
 
   if (this->outside_temperature_sensor_ != nullptr && this->outside_temperature_sensor_->state != temperature) {
-    this->outside_temperature_sensor_->publish_state(
-        temperature);  // Set current (outside) temperature; no temperature steps
+    this->outside_temperature_sensor_->publish_state(temperature);
     ESP_LOGV(TAG, "Outside temperature incl. offset: %d", temperature);
   }
 }
@@ -93,7 +86,6 @@ void PanasonicAC::update_target_temperature(uint8_t raw_value) {
   float temperature = (raw_value * TEMPERATURE_STEP);
   ESP_LOGV(TAG, "Received target temperature %.2f", temperature);
 
-  //Apply offset for displayed value
   temperature += this->current_temperature_offset_;
 
   if (temperature > TEMPERATURE_THRESHOLD) {
@@ -110,7 +102,7 @@ void PanasonicAC::update_swing_horizontal(const StringRef &swing) {
     this->horizontal_swing_state_ = this->horizontal_swing_select_->index_of(swing).value_or(~0UL);
 
     if (this->horizontal_swing_state_ != this->horizontal_swing_select_->active_index().value_or(~0UL)) {
-      this->horizontal_swing_select_->publish_state(this->horizontal_swing_state_);  // Set current horizontal swing position
+      this->horizontal_swing_select_->publish_state(this->horizontal_swing_state_);
     }
   }
 }
@@ -120,7 +112,7 @@ void PanasonicAC::update_swing_vertical(const StringRef &swing) {
     this->vertical_swing_state_ = this->vertical_swing_select_->index_of(swing).value_or(~0UL);
 
     if (this->vertical_swing_state_ != this->vertical_swing_select_->active_index().value_or(~0UL)) {
-      this->vertical_swing_select_->publish_state(this->vertical_swing_state_);  // Set current vertical swing position
+      this->vertical_swing_select_->publish_state(this->vertical_swing_state_);
     }
   }
 }
@@ -129,6 +121,13 @@ void PanasonicAC::update_nanoex(bool nanoex) {
   if (this->nanoex_switch_ != nullptr) {
     this->nanoex_state_ = nanoex;
     this->nanoex_switch_->publish_state(this->nanoex_state_);
+  }
+}
+
+void PanasonicAC::update_nanoeg(bool nanoeg) {
+  if (this->nanoeg_switch_ != nullptr) {
+    this->nanoeg_state_ = nanoeg;
+    this->nanoeg_switch_->publish_state(this->nanoeg_state_);
   }
 }
 
@@ -173,14 +172,9 @@ climate::ClimateAction PanasonicAC::determine_action() {
 
 void PanasonicAC::update_current_power_consumption(int16_t power) {
   if (this->current_power_consumption_sensor_ != nullptr && this->current_power_consumption_sensor_->state != power) {
-    this->current_power_consumption_sensor_->publish_state(
-        power);  // Set current power consumption
+    this->current_power_consumption_sensor_->publish_state(power);
   }
 }
-
-/*
- * Sensor handling
- */
 
 void PanasonicAC::set_outside_temperature_sensor(sensor::Sensor *outside_temperature_sensor) {
   this->outside_temperature_sensor_ = outside_temperature_sensor;
@@ -242,6 +236,15 @@ void PanasonicAC::set_nanoex_switch(switch_::Switch *nanoex_switch) {
   });
 }
 
+void PanasonicAC::set_nanoeg_switch(switch_::Switch *nanoeg_switch) {
+  this->nanoeg_switch_ = nanoeg_switch;
+  this->nanoeg_switch_->add_on_state_callback([this](bool state) {
+    if (state == this->nanoeg_state_)
+      return;
+    this->on_nanoeg_change(state);
+  });
+}
+
 void PanasonicAC::set_eco_switch(switch_::Switch *eco_switch) {
   this->eco_switch_ = eco_switch;
   this->eco_switch_->add_on_state_callback([this](bool state) {
@@ -272,10 +275,6 @@ void PanasonicAC::set_mild_dry_switch(switch_::Switch *mild_dry_switch) {
 void PanasonicAC::set_current_power_consumption_sensor(sensor::Sensor *current_power_consumption_sensor) {
   this->current_power_consumption_sensor_ = current_power_consumption_sensor;
 }
-
-/*
- * Debugging
- */
 
 void PanasonicAC::log_packet(std::vector<uint8_t> data, bool outgoing) {
   if (outgoing) {
