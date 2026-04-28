@@ -36,6 +36,7 @@ CONF_OUTSIDE_TEMPERATURE_OFFSET = "outside_temperature_offset"
 CONF_CURRENT_TEMPERATURE_SENSOR = "current_temperature_sensor"
 CONF_CURRENT_TEMPERATURE_OFFSET = "current_temperature_offset"
 CONF_NANOEX_SWITCH = "nanoex_switch"
+CONF_NANOEG_SWITCH = "nanoeg_switch"
 CONF_ECO_SWITCH = "eco_switch"
 CONF_ECONAVI_SWITCH = "econavi_switch"
 CONF_MILD_DRY_SWITCH = "mild_dry_switch"
@@ -61,6 +62,7 @@ PANASONIC_COMMON_SCHEMA = {
         state_class=STATE_CLASS_MEASUREMENT,
     ),
     cv.Optional(CONF_NANOEX_SWITCH): SWITCH_SCHEMA,
+    cv.Optional(CONF_NANOEG_SWITCH): SWITCH_SCHEMA,
     cv.Optional(CONF_OUTSIDE_TEMPERATURE_OFFSET): cv.int_range(min=-15, max=15),
 }
 
@@ -110,7 +112,7 @@ async def to_code(config):
     if CONF_OUTSIDE_TEMPERATURE_OFFSET in config:
         cg.add(var.set_outside_temperature_offset(config[CONF_OUTSIDE_TEMPERATURE_OFFSET]))
 
-    for s in [CONF_ECO_SWITCH, CONF_NANOEX_SWITCH, CONF_MILD_DRY_SWITCH, CONF_ECONAVI_SWITCH]:
+    for s in [CONF_ECO_SWITCH, CONF_NANOEX_SWITCH, CONF_NANOEG_SWITCH, CONF_MILD_DRY_SWITCH, CONF_ECONAVI_SWITCH]:
         if s in config:
             conf = config[s]
             a_switch = await switch.new_switch(conf)
