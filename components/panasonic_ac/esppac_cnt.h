@@ -30,7 +30,7 @@ class PanasonicACCNT : public PanasonicAC {
   void loop() override;
  protected:
   ACState state_ = ACState::Initializing;  // Stores the internal state of the AC, used during initialization
-  std::vector<uint8_t> data = std::vector<uint8_t>(33);  // Expanded to hold full 33-byte RX payload
+  std::vector<uint8_t> data = std::vector<uint8_t>(10);  // 10 bytes for TX command safety
   std::vector<uint8_t> cmd;                              // Used to build next command
   void handle_poll();
   void handle_cmd();
