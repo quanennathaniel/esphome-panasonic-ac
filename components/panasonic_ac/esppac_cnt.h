@@ -9,7 +9,7 @@ namespace CNT {
 static const uint8_t CTRL_HEADER = 0xF0;  // The header for control frames
 static const uint8_t POLL_HEADER = 0x70;  // The header for the poll command
 static const int POLL_INTERVAL = 5000;    // The interval at which to poll the AC
-static const int CMD_INTERVAL = 250;      // The interval at which to send commands
+static const int CMD_INTERVAL = 5000;     // Temporarily increased to capture TX packets
 
 enum class ACState {
   Initializing,  // Before first query response is received
