@@ -94,6 +94,7 @@ static bool determine_preset_nanoex(uint8_t preset) {
 }
 
 static bool determine_nanoeg(uint8_t value) {
+  // 0x61 = nanoe-G on, 0x27/0x9F = nanoe-G off (captured from CNT logs)
   return value == 0x61;
 }
 
@@ -219,7 +220,11 @@ void PanasonicACCNT::set_data(bool set) {
 
   const char *preset = determine_preset(this->data[5]);
   bool nanoex = determine_preset_nanoex(this->data[5]);
-  bool nanoeg = (this->data.size() > 7) ? determine_nanoeg(this->data[7]) : false;
+
+  // Read nanoe-G directly from rx_buffer_ at index 9 (= payload byte 7, 0-indexed from byte 2)
+  // This avoids expanding the data/cmd vector which would break TX packet sizing
+  bool nanoeg = (this->rx_buffer_.size() > 9) ? determine_nanoeg(this->rx_buffer_[9]) : false;
+
   bool eco = determine_eco(this->data[8]);
   bool econavi = determine_econavi(this->data[5]);
   bool mildDry = determine_mild_dry(this->data[2]);
@@ -331,8 +336,8 @@ bool PanasonicACCNT::verify_packet() {
 
 void PanasonicACCNT::handle_packet() {
   if (this->rx_buffer_[0] == POLL_HEADER) {
-    // Capture full payload (all bytes between header+length and checksum)
-    this->data = std::vector<uint8_t>(this->rx_buffer_.begin() + 2, this->rx_buffer_.end() - 1);
+    // Keep data at 10 bytes for TX safety — nanoe-G is read from rx_buffer_ directly
+    this->data = std::vector<uint8_t>(this->rx_buffer_.begin() + 2, this->rx_buffer_.begin() + 12);
     this->set_data(true);
     this->publish_state();
     if (this->state_ != ACState::Ready) this->state_ = ACState::Ready;
